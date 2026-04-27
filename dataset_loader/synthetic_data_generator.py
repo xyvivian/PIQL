@@ -1,0 +1,118 @@
+import numpy as np
+import pandas as pd
+import random
+import os
+from math import ceil
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+from adbench.myutils import Utils
+
+
+SYNTHETIC_DATA_PATH = '/home/xding2/FoMo-Meta/synthetic_data/'
+
+# currently, data generator only supports for generating the binary classification datasets
+class DataGenerator():
+    def __init__(self, 
+                 seed: int = 42,
+                 dataset: str = None, 
+                 split = "val",
+                 test_size:float= 0.5,
+                 generate_duplicates=True,
+                 n_samples_threshold=1000):
+        '''
+        :param seed: seed for reproducible results
+        :param dataset: specific the dataset name
+        :param test_size: testing set size
+        :param generate_duplicates: whether to generate duplicated samples when sample size is too small
+        :param n_samples_threshold: threshold for generating the above duplicates, if generate_duplicates is False, then datasets with sample size smaller than n_samples_threshold will be dropped
+        '''
+
+        self.seed = seed
+        self.dataset = dataset
+        self.split = split
+
+        self.generate_duplicates = generate_duplicates
+        self.n_samples_threshold = n_samples_threshold
+        self.test_size = test_size
+
+        # dataset list
+        self.dataset_list_gmm = [os.path.splitext(_)[0] for _ in os.listdir(SYNTHETIC_DATA_PATH + f'gaussian')
+                                if os.path.splitext(_)[1] == '.npz'] 
+        # myutils function
+        self.utils = Utils()
+
+
+    def generator(self, X=None, y=None, scale=False,
+                  la=None, at_least_one_labeled=False,
+                  noise_type=None, 
+                  duplicate_times: int = 2,
+                  max_size=10000, validation=False,): 
+        # set seed for reproducible results
+        self.utils.set_seed(self.seed)
+        if self.dataset in self.dataset_list_gmm:
+            data = np.load(os.path.join(SYNTHETIC_DATA_PATH, f'gaussian', self.dataset + '.npz'), allow_pickle=True)
+        else:
+            raise NotImplementedError
+
+        X = data['X']
+        y = data['y']
+        individual_means = data['individual_means']
+        individual_variances = data['individual_variances']
+        global_mean = data['global_mean']
+        global_variance = data['global_variance']
+        global_anomaly_mean = data['global_anomaly_mean']
+        global_anomaly_variance = data['global_anomaly_variance']
+
+        
+        indices = np.arange(len(X))
+        normal_indices = indices[y == 0]
+        np.random.shuffle(normal_indices)
+        anomaly_indices = indices[y == 1]
+
+        train_size = round((1 - self.test_size) * normal_indices.size)
+        train_indices, test_indices = normal_indices[:train_size], normal_indices[train_size:]
+        test_indices = np.append(test_indices, anomaly_indices)
+
+        X_train = X[train_indices]
+        y_train = y[train_indices]
+        X_test = X[test_indices]
+        y_test = y[test_indices]
+        
+        mean_train = individual_means[train_indices]
+        variance_train = individual_variances[train_indices]
+        mean_test = individual_means[test_indices]
+        variance_test = individual_variances[test_indices]
+
+        # standard scaling
+        if scale:
+            scaler = StandardScaler().fit(X_train)
+            X_train = scaler.transform(X_train)
+            X_test = scaler.transform(X_test)
+
+            col_mean = np.nanmean(X_train, axis=0)
+            inds = np.where(np.isnan(col_mean))
+            col_mean[inds] = 0
+
+            inds = np.where(np.isnan(X_train))
+            X_train[inds] = np.take(col_mean, inds[1])
+
+            col_mean = np.nanmean(X_test, axis=0)
+            inds = np.where(np.isnan(col_mean))
+            col_mean[inds] = 0
+
+            inds = np.where(np.isnan(X_test))
+            X_test[inds] = np.take(col_mean, inds[1])
+
+        return {'X_train': X_train, 
+                'y_train': y_train, 
+                'X_test': X_test, 
+                'y_test': y_test,
+                'mean_train': mean_train,
+                'variance_train': variance_train,
+                'mean_test': mean_test,
+                'variance_test': variance_test,
+                'global_mean': global_mean,
+                'global_variance':global_variance,
+                'global_anomaly_mean':global_anomaly_mean,
+                'global_anomaly_variance':global_anomaly_variance}
