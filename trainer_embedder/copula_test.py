@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.special import betainc, betaincinv
 #from trainer_embedder.embedder import describe_prior_program
-from embedder import describe_prior_program
+from trainer_embedder.embedder import describe_prior_program
 
 import time
 import torch

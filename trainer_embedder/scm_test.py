@@ -8,8 +8,8 @@ from sklearn.metrics import roc_auc_score
 import time
 import math
 import random
-#from trainer_embedder.embedder import describe_prior_program
-from embedder import describe_prior_program
+from trainer_embedder.embedder import describe_prior_program
+#from embedder import describe_prior_program
 
 def lognormal_discrete(mu,
                        sigma,

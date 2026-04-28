@@ -31,9 +31,9 @@ from torch import nn
 
 #from data_prior.generator_embed import PriorTrainDataGenerator
 #from data_prior.generator_embed_0413_gmm_predefined import PriorTrainDataGenerator
-from data_prior.generator_program_encoder import PriorTrainDataGenerator
+from data_prior.generator_multi_baseline_0421 import PriorTrainDataGenerator
 from model import encoders
-from trainer.trainer_program_encoder import ZeroShotOD
+from trainer.trainer_program_encoder_mix import ZeroShotOD
 
 class single_eval_pos_generator:
     """Generate the first evaluation position used by the training batches."""
@@ -142,7 +142,7 @@ def main(cfg: DictConfig) -> None:
     generator_mode = hyperparameters['mode']
 
     current_time = datetime.now().strftime('%Y%m%d')
-    config_details = f'meta_program_encoder_gmm_only_cont_context{seq_len}.feat{max_feature_dim}.R{num_R}.LT{apply_linear_transform}.gen1tr1{gen_one_train_one}.reuse{reuse_data_every_n}.E{epochs}.step{steps_per_epoch}.bs{batch_size}.lr{lr}.emb{emsize}.hdim{nhid}.nhead{nhead}.nlayer{nlayer}.ndevice{num_device}.T0{T0}_{current_time}'
+    config_details = f'meta_program_encoder_multiprior_{seq_len}.feat{max_feature_dim}.R{num_R}.LT{apply_linear_transform}.gen1tr1{gen_one_train_one}.reuse{reuse_data_every_n}.E{epochs}.step{steps_per_epoch}.bs{batch_size}.lr{lr}.emb{emsize}.hdim{nhid}.nhead{nhead}.nlayer{nlayer}.ndevice{num_device}.T0{T0}_{current_time}'
     if train_cfg.last_layer_no_R:
         config_details = f'last_layer_no_R{train_cfg.last_layer_no_R}.{config_details}'
 
@@ -184,7 +184,7 @@ def main(cfg: DictConfig) -> None:
         dirpath=save_path,
         filename="{epoch:02d}-{train_loss:.2f}",
         save_top_k=-1,
-        every_n_epochs=50,
+        every_n_epochs=10,
     )
     ckpt_callbacks.append(checkpoint_callback)   
 
@@ -204,7 +204,7 @@ def main(cfg: DictConfig) -> None:
         use_distributed_sampler=False
     )
     
-    trainer.fit(zero_shot_od_pl_model,ckpt_path='FoMo-Meta_0413/ckpt/meta_program_encoder_gmm_only_context5000.feat100.R500.LTFalse.gen1tr1True.reuse100.E1500.step1000.bs2.lr0.0001.emb256.hdim512.nhead4.nlayer2.ndevice4.T00_20260421/seed0/epoch=159-train_loss=0.02.ckpt')
+    trainer.fit(zero_shot_od_pl_model)
 
     train_time = time.time() - start_time
     print('total training time: {}'.format(train_time / 60))
@@ -217,4 +217,4 @@ if __name__ == "__main__":
     
     
     
-#CUDA_VISIBLE_DEVICES=0,1,2,3 python pretrain_performer_encoder.py train.apply_linear_transform=False train.gen_one_train_one=True  train.seed=0 train.num_R=500 train.epochs=1500
+#CUDA_VISIBLE_DEVICES=0,1,2,3 python pretrain_program_encoder_mix.py train.apply_linear_transform=False train.gen_one_train_one=True  train.seed=0 train.num_R=500 train.epochs=1500

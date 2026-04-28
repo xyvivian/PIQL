@@ -18,9 +18,9 @@ from torch.utils.data import DataLoader
 # Add the FoMo-Meta root to sys.path so subdirectories are importable by their
 # short names (e.g. `data_prior`, `model`), matching the pattern used in
 # FoMo-Meta/model/transformer.py.
-_fomo_meta_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _fomo_meta_root not in sys.path:
-    sys.path.insert(0, _fomo_meta_root)
+# _fomo_meta_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# if _fomo_meta_root not in sys.path:
+#     sys.path.insert(0, _fomo_meta_root)
 
 from data_prior.GMM import generate_linear_transform, transform_samples
 from dataset_loader.batch import PriorDataLoader
@@ -35,14 +35,14 @@ from trainer.utils import (
 
 from model import positional_encodings
 import os
-os.environ["HF_HUB_OFFLINE"] = "1"
+# os.environ["HF_HUB_OFFLINE"] = "1"
 
 # Add trainer_embedder root to sys.path for loading the program encoder modules.
-_trainer_embedder_root = os.path.join(_fomo_meta_root, "trainer_embedder")
-if _trainer_embedder_root not in sys.path:
-    sys.path.insert(0, _trainer_embedder_root)
+# _trainer_embedder_root = os.path.join(_fomo_meta_root, "trainer_embedder")
+# if _trainer_embedder_root not in sys.path:
+#     sys.path.insert(0, _trainer_embedder_root)
 
-from lightning_allpriors_contrastive_train import (
+from trainer_embedder.lightning_allpriors_contrastive_train import (
     LitMultiPriorContrastive,
     ProgramTransformerEncoder,
     ProgramVectorizer,
@@ -60,7 +60,8 @@ def build_program_encoder_model(
     *,
     min_dim: int,
     max_dim: int,
-    num_cluster: int,
+    min_num_cluster: int,
+    max_num_cluster: int,
     max_mean: int,
     max_var: int,
     inflate_scale: float,
@@ -86,7 +87,8 @@ def build_program_encoder_model(
         def __init__(self):
             self.min_dim = min_dim
             self.max_dim = max_dim
-            self.num_cluster = num_cluster
+            self.min_num_cluster = min_num_cluster
+            self.max_num_cluster = max_num_cluster
             self.max_mean = max_mean
             self.max_var = max_var
             self.inflate_scale = inflate_scale
@@ -377,11 +379,17 @@ class ZeroShotOD(pl.LightningModule):
         self.program_encoder_ckpt = getattr(
             train_cfg,
             'program_encoder_ckpt',
-            '/ocean/projects/cis250290p/xding/FoMo-Meta_0413/trainer_embedder/ckpt/allpriors_contrastive/allpriors_contrastive.cls10.E50.step80.bs16.lr0.0001.nneg8.20260420_232824/seed42/epoch-epoch=06.ckpt',
+            '/workspace/PIQL/trainer_embedder/ckpt/all_priors_new/epoch-epoch=13.ckpt',
         )
         self.program_encoder_min_dim = int(getattr(train_cfg, 'program_encoder_min_dim', 8))
         self.program_encoder_max_dim = int(getattr(train_cfg, 'program_encoder_max_dim', 40))
-        self.program_encoder_num_cluster = int(getattr(train_cfg, 'program_encoder_num_cluster', 3))
+        default_cluster = int(getattr(train_cfg, 'program_encoder_num_cluster', 3))
+        self.program_encoder_min_num_cluster = int(
+            getattr(train_cfg, 'program_encoder_min_num_cluster', default_cluster)
+        )
+        self.program_encoder_max_num_cluster = int(
+            getattr(train_cfg, 'program_encoder_max_num_cluster', default_cluster)
+        )
         self.program_encoder_max_mean = int(getattr(train_cfg, 'program_encoder_max_mean', 6))
         self.program_encoder_max_var = int(getattr(train_cfg, 'program_encoder_max_var', 6))
         self.program_encoder_inflate_scale = float(getattr(train_cfg, 'program_encoder_inflate_scale', 5.0))
@@ -515,7 +523,8 @@ class ZeroShotOD(pl.LightningModule):
         program_encoder = build_program_encoder_model(
             min_dim=self.program_encoder_min_dim,
             max_dim=self.program_encoder_max_dim,
-            num_cluster=self.program_encoder_num_cluster,
+            min_num_cluster=self.program_encoder_min_num_cluster,
+            max_num_cluster=self.program_encoder_max_num_cluster,
             max_mean=self.program_encoder_max_mean,
             max_var=self.program_encoder_max_var,
             inflate_scale=self.program_encoder_inflate_scale,

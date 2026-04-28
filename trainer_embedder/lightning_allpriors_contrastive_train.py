@@ -15,18 +15,18 @@ from pytorch_lightning.loggers import WandbLogger
 from torch.distributions import Beta, Exponential, Normal, StudentT
 from torch.utils.data import DataLoader, Dataset
 
-from copula_test import (
+from trainer_embedder.copula_test import (
     CorpulaGenerator,
     make_copula_predefined,
 )
-from gmm_test import make_NdMclusterGMM_predefined
-from gmm_trainer_cls import (
+from trainer_embedder.gmm_test import make_NdMclusterGMM_predefined
+from trainer_embedder.gmm_trainer import (
     ProgramTransformerEncoder,
     ProgramVectorizer,
     build_vocab,
     tokenize_program,
 )
-from scm_test import (
+from trainer_embedder.scm_test import (
     StructuralCausalModel,
     _detect_activation_name,
     describe_scm_model,

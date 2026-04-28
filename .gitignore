@@ -1,0 +1,17 @@
+# Python bytecode/cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Model checkpoints
+*.ckpt
+ckpt/
+**/ckpt/
+
+# Common training artifacts
+outputs/
+**/outputs/
+wandb/
+**/wandb/
+*.pt
+*.pth
