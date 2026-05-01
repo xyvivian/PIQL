@@ -13,5 +13,13 @@ outputs/
 **/outputs/
 wandb/
 **/wandb/
+encoder_ckpts/
+**/encoder_ckpts/
+pretrained_ckpts/
+**/pretrained_ckpts/
+results/
+**/results/
+synbench/
+**/synbench/
 *.pt
 *.pth

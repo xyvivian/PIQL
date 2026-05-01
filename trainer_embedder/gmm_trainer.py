@@ -3,7 +3,7 @@
 
 
 from trainer_embedder.gmm_test import *
-from trainer_embedder.nvidia-SUB_DIMSembedder  import *
+from trainer_embedder.embedder  import *
 
 import re
 from typing import Any, Dict, List, Optional

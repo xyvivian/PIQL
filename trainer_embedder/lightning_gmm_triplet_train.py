@@ -14,8 +14,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader, Dataset
 
-from gmm_test import make_NdMclusterGMM_predefined
-from gmm_trainer import (
+from trainer_embedder.gmm_test import make_NdMclusterGMM_predefined
+from trainer_embedder.gmm_trainer_old import (
     ProgramTransformerEncoder,
     ProgramVectorizer,
     build_vocab,

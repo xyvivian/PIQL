@@ -49,7 +49,7 @@ def make_model_od(criterion,
                   emsize=200, nhid=200, nlayers=6, nhead=2, dropout=0.0, seq_len=10,
                   input_normalization=False,
                   y_encoder_generator=None, pos_encoder_generator=None, decoder_dict={}, extra_prior_kwargs_dict={},
-                  initializer=None,
+                  initializer=None, n_tokens=10,
                   efficient_eval_masking=True, num_global_att_tokens=0, **model_extra_args):
     style_encoder = None
     pos_encoder = (pos_encoder_generator or positional_encodings.NoPositionalEncoding)(emsize, seq_len * 2)
@@ -71,7 +71,7 @@ def make_model_od(criterion,
         extra_prior_kwargs_dict['num_features'],
         extra_prior_kwargs_dict['num_features'],
         seq_len,
-        10,
+        n_tokens,
     )
     model = TransformerModel(encoder=encoder
                              , nhead=nhead

@@ -152,10 +152,10 @@ def make_model_od(criterion,
     _internal_enc_gen = internal_encoder_generator if internal_encoder_generator is not None else encoder_generator
     internal_feature_encoder = _internal_enc_gen(extra_prior_kwargs_dict['num_features'], emsize)
     input_to_internal_encoder = input_to_internal_encoder_generator(
-        extra_prior_kwargs_dict['num_features'],
-        extra_prior_kwargs_dict['num_features'],
-        seq_len,
-        1,
+              100,
+              256,
+              seq_len,
+              1,
     )
     model = TransformerModel(encoder=encoder
                              , nhead=nhead
@@ -178,7 +178,6 @@ def make_model_od(criterion,
                              )
     model.criterion = criterion
     print(model)
-    exit(0)
     return model
 
 

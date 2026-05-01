@@ -1,9 +1,5 @@
-# from trainer_embedder.gmm_test import *
-# from trainer_embedder.embedder  import *
-
-
-from gmm_test import *
-from embedder  import *
+from trainer_embedder.gmm_test import *
+from trainer_embedder.embedder import *
 
 import re
 from typing import Any, Dict, List, Optional
@@ -377,14 +373,6 @@ class ProgramTransformerEncoder(nn.Module):
         super().__init__()
         self.vectorizer = vectorizer
         self.num_cls = num_cls
-        if self.num_cls < 1:
-            raise ValueError(f"num_cls must be >= 1, got {self.num_cls}")
-
-        # Learned CLS tokens so each slot can specialize independently.
-        self.cls_tokens = nn.Parameter(torch.empty(self.num_cls, d_model))
-        self.cls_pos_emb = nn.Parameter(torch.empty(self.num_cls, d_model))
-        nn.init.normal_(self.cls_tokens, mean=0.0, std=0.02)
-        nn.init.normal_(self.cls_pos_emb, mean=0.0, std=0.02)
 
         layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -396,41 +384,24 @@ class ProgramTransformerEncoder(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(layer, num_layers=num_layers)
 
-    def _strip_leading_symbolic_cls_tokens(self, tokens: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        # tokenization may already prepend symbolic CLS placeholders.
-        # We remove those and rely on learned CLS parameters above.
-        i = 0
-        max_strip = min(self.num_cls, len(tokens))
-        while i < max_strip:
-            tok = tokens[i]
-            if tok.get("type") == "symbol" and tok.get("name") == "CLS":
-                i += 1
-            else:
-                break
-        return tokens[i:]
-
     def forward(self, tokens: List[Dict[str, Any]]) -> torch.Tensor:
         """
         tokens -> program embedding
         Returns:
             cls_repr: [num_cls * d_model]
         """
-        tokens = self._strip_leading_symbolic_cls_tokens(tokens)
         x = self.vectorizer(tokens)      # [seq_len, d_model]
-        cls = self.cls_tokens + self.cls_pos_emb  # [num_cls, d_model]
-        x = torch.cat([cls, x], dim=0).unsqueeze(0)  # [1, num_cls + seq_len, d_model]
-        h = self.encoder(x)              # [1, num_cls + seq_len, d_model]
-        cls_repr = h[:, :self.num_cls, :].reshape(-1)  # [num_cls * d_model]
+        x = x.unsqueeze(0)               # [1, seq_len, d_model]
+        h = self.encoder(x)              # [1, seq_len, d_model]
+        cls_count = min(self.num_cls, h.size(1))
+        cls_repr = h[:, :cls_count, :].reshape(-1)  # [cls_count * d_model]
         return cls_repr
 
     def encode_sequence(self, tokens: List[Dict[str, Any]]) -> torch.Tensor:
         """
         Returns the full encoded sequence.
         """
-        tokens = self._strip_leading_symbolic_cls_tokens(tokens)
-        x = self.vectorizer(tokens)
-        cls = self.cls_tokens + self.cls_pos_emb
-        x = torch.cat([cls, x], dim=0).unsqueeze(0)
+        x = self.vectorizer(tokens).unsqueeze(0)
         h = self.encoder(x)
         return h.squeeze(0)              # [seq_len, d_model]
 
