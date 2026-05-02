@@ -96,7 +96,7 @@ class TransformerModel(nn.Module):
         print('input internal encoder:')
         print(self.input_to_internal_encoder)
 
-        self.internal_feature_encoder = nn.Linear(256, 256)
+        self.internal_feature_encoder = nn.Linear(256, 512)
 
         # Build decoder head(s)
         def _make_decoder_dict(desc: dict):
@@ -281,12 +281,76 @@ class TransformerModel(nn.Module):
         
         if single_eval_pos is None:
             single_eval_pos = x_src.shape[0]
+        
+        # print(f"{x_src.min()=},{x_src.max()=}")
+        # first_100 = x_src[0:100]
+        # print(first_100.shape)
+        # if first_100.ndim == 3 and first_100.shape[0] > 0:
+        #     min_over_t, min_t_idx = torch.min(first_100, dim=0)
+        #     max_over_t, max_t_idx = torch.max(first_100, dim=0)
 
-        print('x_src',x_src.shape)
+        #     k = min(10, min_over_t.numel())
+        #     flat_min_vals, flat_min_pos = torch.topk(min_over_t.reshape(-1), k=k, largest=False)
+        #     flat_max_vals, flat_max_pos = torch.topk(max_over_t.reshape(-1), k=k, largest=True)
+
+        #     min_b_idx = flat_min_pos // min_over_t.shape[1]
+        #     min_f_idx = flat_min_pos % min_over_t.shape[1]
+        #     max_b_idx = flat_max_pos // max_over_t.shape[1]
+        #     max_f_idx = flat_max_pos % max_over_t.shape[1]
+
+        #     min_report = []
+        #     for v, b, f in zip(flat_min_vals, min_b_idx, min_f_idx):
+        #         t = min_t_idx[b, f]
+        #         min_report.append((int(f), int(b), int(t), float(v)))
+
+        #     max_report = []
+        #     for v, b, f in zip(flat_max_vals, max_b_idx, max_f_idx):
+        #         t = max_t_idx[b, f]
+        #         max_report.append((int(f), int(b), int(t), float(v)))
+
+        #     print(
+        #         f"first_100 top-{k} smallest over dim0 as (feature_dim, batch_idx, t_idx, value): {min_report}"
+        #     )
+        #     print(
+        #         f"first_100 top-{k} largest over dim0 as (feature_dim, batch_idx, t_idx, value): {max_report}"
+        #     )
+        # context_x = x_src[100:single_eval_pos]
+        # if context_x.ndim == 3 and context_x.shape[0] > 0:
+        #     context_min = context_x.min()
+        #     context_max = context_x.max()
+            # context_argmin = context_x.argmin()
+            # context_argmax = context_x.argmax()
+
+            # t_min, b_min, f_min = torch.unravel_index(context_argmin, context_x.shape)
+            # t_max, b_max, f_max = torch.unravel_index(context_argmax, context_x.shape)
+            # print(
+            #     "x_src context global min/max: "
+            #     f"min={context_min.item():.6g} at (t={int(t_min)}, b={int(b_min)}, f={int(f_min)}), "
+            #     f"max={context_max.item():.6g} at (t={int(t_max)}, b={int(b_max)}, f={int(f_max)})"
+            # )
+
+            # context_flat = context_x.reshape(-1, context_x.shape[-1])
+            # dim_mins = torch.amin(context_flat, dim=0)
+            # dim_maxs = torch.amax(context_flat, dim=0)
+            # k = min(10, dim_mins.numel())
+
+            # min_vals, min_dims = torch.topk(dim_mins, k=k, largest=False)
+            # max_vals, max_dims = torch.topk(dim_maxs, k=k, largest=True)
+
+            # min_dim_report = [
+            #     (int(dim), float(val)) for dim, val in zip(min_dims.detach().cpu(), min_vals.detach().cpu())
+            # ]
+            # max_dim_report = [
+            #     (int(dim), float(val)) for dim, val in zip(max_dims.detach().cpu(), max_vals.detach().cpu())
+            # ]
+
+            # print(f"x_src context top-{k} dims by smallest per-dim minima: {min_dim_report}")
+            # print(f"x_src context top-{k} dims by largest per-dim maxima: {max_dim_report}")
         
         x_to_global = self.input_to_internal_encoder(x_src)
-        print('x_to_global', x_to_global.shape)
-        exit(0)
+
+        if torch.isnan(x_to_global).any():
+            print("Warning: x_to_global contains NaNs")
         
         # Feature embedding
         x_src = self.encoder(x_src)
@@ -295,9 +359,13 @@ class TransformerModel(nn.Module):
             x_global_train = (1-alpha) * x_to_global + alpha * global_internals
         else:
             x_global_train = x_to_global
-            
+        
         global_internals = self.internal_feature_encoder(x_global_train)
         global_internal_pos = global_internals.shape[0]
+
+        if torch.isnan(global_internals).any():
+            print("Warning: global_internals contains NaNs")
+        
 
         # Append "decode-once" placeholder tokens
         if self.decoder_dict_once is not None:
@@ -333,7 +401,6 @@ class TransformerModel(nn.Module):
         train_x = x_src[:single_eval_pos]
         if y_src is not None:
             train_x = train_x + y_src[:single_eval_pos]
-            
         src = torch.cat([global_internals, global_src, style_src, train_x, x_src[single_eval_pos:]], dim=0)
 
 
@@ -343,6 +410,9 @@ class TransformerModel(nn.Module):
             src = self.pos_encoder(src)
 
         output = self.transformer_encoder(src, src_mask)
+
+        if torch.isnan(output).any():
+            print("Warning: output contains NaNs")
 
         # Determine output slice boundaries
         num_prefix = len(style_src) + (

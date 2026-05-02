@@ -40,7 +40,9 @@ def average_pool(last_hidden_states: Tensor,
     return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
 
 
+
 class PriorTrainDataGenerator:  # generate synthetic data for training
+    
     def __init__(self, cfg):
         self.cfg = cfg
         self.train_cfg = cfg.train
@@ -68,12 +70,7 @@ class PriorTrainDataGenerator:  # generate synthetic data for training
         # feature transform:
         self.FT = FeatureTransform(cfg=cfg)
         self.num_workers = None
-        
         self.update_model_parameters()
-        self.embed_model  = SentenceTransformer("/home/xding2/FoMo-Meta/bge-m3")
-        # a pre-fitted pca model to dimension reduction
-        self.pca = joblib.load("/home/xding2/FoMo-Meta/data_prior/pca_100.joblib")
-
 
     def set_num_workers(self, num_workers):
         self.num_workers = num_workers
@@ -138,8 +135,6 @@ class PriorTrainDataGenerator:  # generate synthetic data for training
                             device,
                             every_n_dim,
                             model_choices,
-                            pca,
-                            embed_model,
                             model_weights = None,
                             return_params=True): 
         #torch.cuda.empty_cache()
@@ -275,8 +270,6 @@ class PriorTrainDataGenerator:  # generate synthetic data for training
                     every_n_dim =every_n_dim,
                     model_choices = self.model_choices,
                     model_weights = model_name,
-                    pca = self.pca,
-                    embed_model = self.embed_model
                     )
             else:
                 inliners, LA, sub_dims, model_name = process_function(
@@ -285,8 +278,6 @@ class PriorTrainDataGenerator:  # generate synthetic data for training
                     device = self.device,
                     every_n_dim =every_n_dim,
                     model_choices = self.model_choices,
-                    pca = self.pca,
-                    embed_model = self.embed_model
                     )
             inliners_list.append(inliners)
             LA_list.append(LA)
@@ -328,38 +319,78 @@ class PriorTrainDataGenerator:  # generate synthetic data for training
         return inliners, LA, sub_dims, model_names
 
 
+        
 
-    def compute_internal_features(self,data):
-        """
-        Compute per-dimension statistics on GPU using PyTorch.
-        Args:
-            tensor: torch.Tensor on GPU
-        Returns:
-            torch.Tensor with shape (9, dim), where rows are
-            [mean, variance, skewness, kurtosis,
-             q10, q25, q50, q75, q90].
-        """
-        if not data.is_cuda:
-            tensor= data.cuda()
-        else: 
-            tensor = data
-        mean = tensor.mean(dim=0)
-        variance = tensor.var(dim=0)
-        std = tensor.std(dim=0)
-        eps = 1e-8
-        # Compute skewness (third standardized moment)
-        centered = tensor - mean
-        skewness = (centered ** 3).mean(dim=0) / ((std + eps) ** 3)
-        # Compute kurtosis (fourth standardized moment - 3)
-        kurtosis_val = (centered ** 4).mean(dim=0) / ((std + eps) ** 4) - 3
+    def get_batch_all_models(self, 
+                             list_of_data, 
+                             seq_len=100, 
+                             hyperparameters=None,
+                             **kwargs):
+        #print(len(list_of_data))
+        # this will be part of the collate_fn to help prepare batched data
+        xs = []
+        internal_xs = []
+        ys = []
+        model_names = []
+        is_train = kwargs['training']
+        internal_choice = kwargs['internal_choice']
+        single_eval_pos = kwargs['single_eval_pos'] if is_train else seq_len - 1
+        # print('seq_len:', seq_len)
+        # print('single_eval_pos:', single_eval_pos)
+        num_inliners = single_eval_pos
+        num_test_x = seq_len - single_eval_pos
+        ignore_index = hyperparameters['ignore_index']
+        # print('ignore_index:', ignore_index)
+        
+        
+        def make_x_y_with_stored_data_internal_100(train_test_in, test_la, weight_variable=None):
+            train_test_in = train_test_in[torch.randperm(train_test_in.shape[0])]
+            test_la = test_la[torch.randperm(test_la.shape[0])]
 
-        # Compute quantiles per dimension
-        quantile_levels = torch.tensor([0.10, 0.25, 0.50, 0.75, 0.90], device=tensor.device, dtype=tensor.dtype)
-        q10, q25, q50, q75, q90 = torch.quantile(tensor, quantile_levels, dim=0)
+            inliners = train_test_in[:num_inliners]
 
-        # Stack per-dimension statistics into a (9, dim) tensor
-        stats = torch.stack([mean, variance, skewness, kurtosis_val, q10, q25, q50, q75, q90], dim=0)
-        return stats
+            test_inliner = train_test_in[num_inliners:]
+            test_la = test_la[:num_test_x]
+
+            test_x = torch.cat([test_inliner, test_la], dim=0)
+            test_y = torch.tensor([0] * num_test_x + [1] * num_test_x)
+
+            sample_indices = torch.randperm(2 * num_test_x)[:num_test_x]
+
+            test_x = test_x[sample_indices]
+            test_y = test_y[sample_indices]
+
+            x = torch.cat([inliners, test_x], dim=0)  # (num_inliners+num_test_x, dim)
+            internal_features = self.compute_100_internal_features(x)
+            
+            y = torch.cat([torch.tensor([ignore_index] * num_inliners), test_y], dim=0)
+
+            feature_dim = x.shape[-1]
+            if feature_dim < self.max_feature_dim:
+                x = self.FT.feature_padding_torch(x=x, num_feature=feature_dim)
+                num_feature= internal_features.shape[1]
+                internal_features = torch.cat([internal_features, torch.zeros(internal_features.shape[0], self.max_feature_dim - num_feature, device=x.device)], dim=-1)
+           
+            x = torch.cat([internal_features, x], dim=0)
+            y = torch.cat([torch.tensor([0]*internal_features.shape[0]),y],dim=0)
+            return x, y, internal_features.shape[0]   
+        
+        for data in list_of_data:
+            inliners = data['in'][:self.seq_len, :]
+            la = data['la'][:self.seq_len, :]
+            model_name = data['model_name']
+            x, y, prepend_dim = make_x_y_with_stored_data_internal_100(train_test_in=inliners, 
+                                                                 test_la=la,
+                                                                 weight_variable=model_name)
+            xs.append(x)
+            ys.append(y)
+            internal_xs.append(model_name[1])
+            model_names.append(model_name[0])
+
+        xs = torch.stack(xs, dim=0)  #.to(torch.float)  # (bs, seq_len, dim)
+        ys = torch.stack(ys, dim=0)  #.to(torch.float)  # (bs, seq_len)
+        return Batch(x=xs.transpose(0, 1), y=None, internal_xs=internal_xs, target_y=ys.transpose(0, 1),model_names = model_names, single_eval_pos=single_eval_pos + prepend_dim) #+prepend_dim)
+
 
 
     def compute_100_internal_features(self, data):
@@ -510,15 +541,16 @@ class PriorTrainDataGenerator:  # generate synthetic data for training
         central_moment_2 = torch.mean(centered ** 2, dim=0)
         central_moment_3 = torch.mean(centered ** 3, dim=0)
         central_moment_4 = torch.mean(centered ** 4, dim=0)
+        clip_value = 100.0
         higher_moment_stats = [
-            moment_5,
-            moment_6,
-            raw_moment_2,
-            raw_moment_3,
-            raw_moment_4,
-            central_moment_2,
-            central_moment_3,
-            central_moment_4,
+            torch.clamp(moment_5, min=-clip_value, max=clip_value),
+            torch.clamp(moment_6, min=-clip_value, max=clip_value),
+            torch.clamp(raw_moment_2, min=-clip_value, max=clip_value),
+            torch.clamp(raw_moment_3, min=-clip_value, max=clip_value),
+            torch.clamp(raw_moment_4, min=-clip_value, max=clip_value),
+            torch.clamp(central_moment_2, min=-clip_value, max=clip_value),
+            torch.clamp(central_moment_3, min=-clip_value, max=clip_value),
+            torch.clamp(central_moment_4, min=-clip_value, max=clip_value),
         ]
         # ------------------------------------------------------------------
         # 5. Tail / outlier proportions: 12 stats
@@ -594,75 +626,3 @@ class PriorTrainDataGenerator:  # generate synthetic data for training
             dim=0,
         )
         return stats
-        
-
-    def get_batch_all_models(self, 
-                             list_of_data, 
-                             seq_len=100, 
-                             hyperparameters=None,
-                             **kwargs):
-        #print(len(list_of_data))
-        # this will be part of the collate_fn to help prepare batched data
-        xs = []
-        internal_xs = []
-        ys = []
-        model_names = []
-        is_train = kwargs['training']
-        internal_choice = kwargs['internal_choice']
-        single_eval_pos = kwargs['single_eval_pos'] if is_train else seq_len - 1
-        # print('seq_len:', seq_len)
-        # print('single_eval_pos:', single_eval_pos)
-        num_inliners = single_eval_pos
-        num_test_x = seq_len - single_eval_pos
-        ignore_index = hyperparameters['ignore_index']
-        # print('ignore_index:', ignore_index)
-        
-        
-        def make_x_y_with_stored_data_internal_100(train_test_in, test_la, weight_variable=None):
-            train_test_in = train_test_in[torch.randperm(train_test_in.shape[0])]
-            test_la = test_la[torch.randperm(test_la.shape[0])]
-
-            inliners = train_test_in[:num_inliners]
-
-            test_inliner = train_test_in[num_inliners:]
-            test_la = test_la[:num_test_x]
-
-            test_x = torch.cat([test_inliner, test_la], dim=0)
-            test_y = torch.tensor([0] * num_test_x + [1] * num_test_x)
-
-            sample_indices = torch.randperm(2 * num_test_x)[:num_test_x]
-
-            test_x = test_x[sample_indices]
-            test_y = test_y[sample_indices]
-
-            x = torch.cat([inliners, test_x], dim=0)  # (num_inliners+num_test_x, dim)
-            internal_features = self.compute_100_internal_features(x)
-            
-            y = torch.cat([torch.tensor([ignore_index] * num_inliners), test_y], dim=0)
-
-            feature_dim = x.shape[-1]
-            if feature_dim < self.max_feature_dim:
-                x = self.FT.feature_padding_torch(x=x, num_feature=feature_dim)
-                num_feature= internal_features.shape[1]
-                internal_features = torch.cat([internal_features, torch.zeros(internal_features.shape[0], self.max_feature_dim - num_feature, device=x.device)], dim=-1)
-           
-            x = torch.cat([internal_features, x], dim=0)
-            y = torch.cat([torch.tensor([0]*internal_features.shape[0]),y],dim=0)
-            return x, y, internal_features.shape[0]   
-        
-
-        for data in list_of_data:
-            inliners = data['in'][:self.seq_len, :]
-            la = data['la'][:self.seq_len, :]
-            model_name = data['model_name']
-            x, y, prepend_dim = make_x_y_with_stored_data_internal_100(train_test_in=inliners, 
-                                                                 test_la=la,
-                                                                 weight_variable=model_name)
-            xs.append(x)
-            ys.append(y)
-            internal_xs.append(model_name[1])
-            model_names.append(model_name[0])
-
-        xs = torch.stack(xs, dim=0)  #.to(torch.float)  # (bs, seq_len, dim)
-        ys = torch.stack(ys, dim=0)  #.to(torch.float)  # (bs, seq_len)
-        return Batch(x=xs.transpose(0, 1), y=None, internal_xs=internal_xs, target_y=ys.transpose(0, 1),model_names = model_names, single_eval_pos=single_eval_pos + prepend_dim) #+prepend_dim)

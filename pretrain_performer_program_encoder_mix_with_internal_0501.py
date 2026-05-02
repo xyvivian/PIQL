@@ -151,7 +151,7 @@ def main(cfg: DictConfig) -> None:
     generator_mode = hyperparameters['mode']
 
     current_time = datetime.now().strftime('%Y%m%d')
-    config_details = f'meta_performer_program_encoder_mix_0429_continue_context{seq_len}.feat{max_feature_dim}.R{num_R}.LT{apply_linear_transform}.gen1tr1{gen_one_train_one}.reuse{reuse_data_every_n}.E{epochs}.step{steps_per_epoch}.bs{batch_size}.lr{lr}.emb{emsize}.hdim{nhid}.nhead{nhead}.nlayer{nlayer}.ndevice{num_device}.T0{T0}_{current_time}'
+    config_details = f'meta_performer_program_encoder_mix_with_internal_0501_continue_context{seq_len}.feat{max_feature_dim}.R{num_R}.LT{apply_linear_transform}.gen1tr1{gen_one_train_one}.reuse{reuse_data_every_n}.E{epochs}.step{steps_per_epoch}.bs{batch_size}.lr{lr}.emb{emsize}.hdim{nhid}.nhead{nhead}.nlayer{nlayer}.ndevice{num_device}.T0{T0}_{current_time}'
     if train_cfg.last_layer_no_R:
         config_details = f'last_layer_no_R{train_cfg.last_layer_no_R}.{config_details}'
 
@@ -193,7 +193,7 @@ def main(cfg: DictConfig) -> None:
         dirpath=save_path,
         filename="{epoch:02d}-{train_loss:.2f}",
         save_top_k=-1,
-        every_n_epochs=50,
+        every_n_epochs=10,
     )
     ckpt_callbacks.append(checkpoint_callback)   
 
@@ -213,7 +213,7 @@ def main(cfg: DictConfig) -> None:
         use_distributed_sampler=False
     )
     
-    trainer.fit(zero_shot_od_pl_model,ckpt_path='ckpt/meta_performer_program_encoder_mix_0429_context5000.feat100.R500.LTFalse.gen1tr1True.reuse100.E1500.step1000.bs2.lr0.0001.emb512.hdim1024.nhead8.nlayer10.ndevice4.T00_20260430/seed0/epoch=149-train_loss=0.02.ckpt')
+    trainer.fit(zero_shot_od_pl_model) #,ckpt_path='ckpt/meta_performer_program_encoder_mix_0429_context5000.feat100.R500.LTFalse.gen1tr1True.reuse100.E1500.step1000.bs2.lr0.0001.emb512.hdim1024.nhead8.nlayer10.ndevice4.T00_20260430/seed0/epoch=149-train_loss=0.02.ckpt')
 
     train_time = time.time() - start_time
     print('total training time: {}'.format(train_time / 60))
@@ -226,4 +226,4 @@ if __name__ == "__main__":
     
     
     
-#CUDA_VISIBLE_DEVICES=0,1,2,3 python pretrain_performer_encoder.py train.apply_linear_transform=False train.gen_one_train_one=True  train.seed=0 train.num_R=500 train.epochs=1500
+#CUDA_VISIBLE_DEVICES=0,1,2,3 python pretrain_performer_program_encoder_mix_with_internal_0501.py train.apply_linear_transform=False train.gen_one_train_one=True  train.seed=0 train.num_R=500 train.epochs=1500

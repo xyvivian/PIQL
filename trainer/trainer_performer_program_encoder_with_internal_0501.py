@@ -391,7 +391,7 @@ class ZeroShotOD(pl.LightningModule):
         self.program_encoder_ckpt = getattr(
             train_cfg,
             'program_encoder_ckpt',
-            '/workspace/PIQL-copy/PIQL/trainer_embedder/ckpt/epoch-epoch=13.ckpt',
+            '/workspace/PIQL/trainer_embedder/ckpt/epoch-epoch=13.ckpt',
         )
         self.program_encoder_min_dim = int(getattr(train_cfg, 'program_encoder_min_dim', 8))
         self.program_encoder_max_dim = int(getattr(train_cfg, 'program_encoder_max_dim', 40))
@@ -784,6 +784,19 @@ class ZeroShotOD(pl.LightningModule):
                 alpha=alpha,
             )
 
+            # def _contains_nan(obj):
+            #     if torch.is_tensor(obj):
+            #         return torch.isnan(obj).any().item()
+            #     if isinstance(obj, dict):
+            #         return any(_contains_nan(v) for v in obj.values())
+            #     if isinstance(obj, (list, tuple)):
+            #         return any(_contains_nan(v) for v in obj)
+            #     return False
+
+            # if _contains_nan(out):
+            #     print('output has nan here!!')
+            #     raise SystemExit(0)
+
             # this handling is for training old models only, this can be deleted soon(ish)
             # to only support models that return a tuple of dicts
             out, output_once = out if isinstance(out, tuple) else (out, None)
@@ -813,8 +826,9 @@ class ZeroShotOD(pl.LightningModule):
                 targets[torch.isnan(targets)] = -100
                 losses = self.criterion(output.flatten(), targets.flatten())
             elif isinstance(self.criterion, nn.CrossEntropyLoss):
-                targets[torch.isnan(targets)] = -100
-                # print(f"{targets.min()=}, {targets.max()=}")
+                #targets[torch.isnan(targets)] = -100
+                # print(f"{targets.min()=},{targets.max()=}")
+                # print(f"{output.min()=},{output.max()=}")
                 losses = self.criterion(output.reshape(-1, self.n_out), targets.long().flatten())
             else:
                 losses = self.criterion(output, targets)
@@ -826,7 +840,7 @@ class ZeroShotOD(pl.LightningModule):
             print("Invalid step encountered, skipping...")
             print(e)
             raise e
-
+        # print(loss)
         return loss, losses, single_eval_pos, targets, nan_share, model_names
 
     def training_step(self, batch, batch_idx):

@@ -617,20 +617,25 @@ class ZeroShotOD(pl.LightningModule):
                 embeds.append(emb)
         return torch.stack(embeds, dim=0).to(self.device)
 
-    def get_alpha(self):
-        p = self.current_epoch / self.epochs
-        p1 = 0.1   # warmup (pure teacher)
-        p2 = 0.4   # end of transition
 
-        if p < p1:
+    def get_alpha(self):
+        epoch = self.current_epoch
+        p1_epoch = 150
+        ckpt_epoch = 500
+        new_end_epoch = 1200
+        if epoch < p1_epoch:
             return 1.0
-        elif p < p2:
-            # cosine decay
-            x = (p - p1) / (p2 - p1)
+        elif epoch <= ckpt_epoch:
+            # original cosine: 150 -> 600
+            x = (epoch - 150) / (600 - 150)
             return 0.5 * (1 + math.cos(math.pi * x))
+        elif epoch < new_end_epoch:
+            # prolonged cosine tail: 500 -> 1000
+            alpha_ckpt = 0.5 * (1 + math.cos(math.pi * (500 - 150) / (600 - 150)))
+            x = (epoch - ckpt_epoch) / (new_end_epoch - ckpt_epoch)
+            return 0.5 * alpha_ckpt * (1 + math.cos(math.pi * x)) 
         else:
             return 0.0
-
 
     def configure_optimizers(self):
         # learning rate

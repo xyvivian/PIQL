@@ -23,3 +23,5 @@ synbench/
 **/synbench/
 *.pt
 *.pth
+lightning_logs/
+

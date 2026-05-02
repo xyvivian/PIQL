@@ -11,9 +11,10 @@ echo "Upgrading pip..."
 pip install --upgrade pip
 
 echo "Installing core ML stack..."
+
+pip3 install torch torchvision
+
 pip install \
-    torch==1.13.1 \
-    torchvision \
     numpy \
     scipy \
     pandas \
